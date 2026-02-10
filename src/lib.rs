@@ -73,7 +73,7 @@ pub struct SpatialQueriesPlugin;
 #[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PrepareSpatialLookup;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct SpatialQueryEntity;
 
 impl Plugin for SpatialQueriesPlugin {
