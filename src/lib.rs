@@ -73,6 +73,9 @@ pub struct SpatialQueriesPlugin;
 #[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PrepareSpatialLookup;
 
+#[derive(Component)]
+pub struct SpatialQueryEntity;
+
 impl Plugin for SpatialQueriesPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(SpatialLookupState::default())
@@ -138,7 +141,7 @@ impl SpatialLookupState {
 ///
 /// Any systems using `SpatialQuery<_>` *MUST* be scheduled after this system
 pub fn prepare_spatial_lookup(
-    all_entities: Query<(Entity, &GlobalTransform)>,
+    all_entities: Query<(Entity, &GlobalTransform), With<SpatialQueryEntity>>,
     mut lookup_state: ResMut<SpatialLookupState>,
 ) {
     lookup_state.entities.clear();
