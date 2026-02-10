@@ -48,7 +48,7 @@ fn entities_and_positions(n: u32) -> Vec<(Entity, Vec3)> {
 
     for i in 0..n {
         entities.push((
-            Entity::from_raw(i),
+            Entity::from_raw_u32(i).unwrap(),
             Vec3::new(
                 rng.f32_normalized() * WORLD_SIZE,
                 rng.f32_normalized() * WORLD_SIZE,
