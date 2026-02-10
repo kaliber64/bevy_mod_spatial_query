@@ -20,13 +20,13 @@ where
     'w: 'q,
     's: 'q,
 {
-    type Item = D::Item<'q>;
+    type Item = D::Item<'q,'q>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(entity) = self.entities.pop() {
             match unsafe { self.query.get_unchecked(entity) } {
                 Ok(data) => {
-                    return Some(unsafe { std::mem::transmute::<D::Item<'_>, D::Item<'q>>(data) });
+                    return Some(unsafe { std::mem::transmute::<D::Item<'_,'_>, D::Item<'q,'q>>(data) });
                 }
                 Err(_) => continue,
             }

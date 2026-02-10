@@ -4,6 +4,7 @@ use crate::SpatialLookupAlgorithm;
 use bevy::math::{FloatOrd, FloatPow};
 use bevy::prelude::*;
 use bevy::tasks::TaskPool;
+use log::warn;
 
 type EntityPositionPair = (Entity, Vec3);
 
@@ -309,7 +310,7 @@ impl BvhNode {
 
         match &self.kind {
             BvhNodeKind::Leaf(_) => {
-                gizmos.cuboid(
+                gizmos.cube(
                     Transform::from_translation(cuboid_centroid).with_scale(cuboid_scale),
                     Color::hsv((level as f32) / (max_depth as f32) * 360., 0.8, 1.0),
                 );

@@ -30,7 +30,7 @@ mod tests {
 
         for i in 0..n {
             entities.push((
-                Entity::from_raw(i),
+                Entity::from_raw_u32(i).unwrap(),
                 Vec3::new(
                     rng.f32_normalized() * WORLD_SIZE,
                     rng.f32_normalized() * WORLD_SIZE,

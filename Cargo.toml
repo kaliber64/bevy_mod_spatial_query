@@ -1,26 +1,27 @@
 [package]
 name = "bevy_mod_spatial_query"
-version = "0.2.0"
+version = "0.1.0"
 edition = "2024"
 license = "MIT"
-authors = ["Ada Hieta <ada@hieta.fi>"]
+authors = ["David Maloy <kaliber64@hotmail.com>"]
 description = "Spatially aware Queries for the Bevy game engine"
 keywords = ["gamedev", "bevy", "spatial"]
 categories = ["game-development"]
-homepage = "https://github.com/Feilkin/bevy_mod_spatial_query"
-repository = "https://github.com/Feilkin/bevy_mod_spatial_query"
-readme = "README.md"
+homepage = "https://github.com/kaliber64/bevy_mod_spatial_query"
+repository = "https://github.com/kaliber64/bevy_mod_spatial_query"
 
 [lib]
 # Disable benchmarks because we use Criterion.rs for benchmarking
 bench = false
 
 [dependencies]
-bevy = { version = "0.15", default-features = false, features = ["bevy_color", "bevy_gizmos"] }
+bevy = { version = "0.18", default-features = false, features = ["bevy_color", "bevy_gizmos"] }
+bevy_turborand = "0.13.0"
+log = "0.4.29"
 
 [dev-dependencies]
 # more bevy features are needed for the examples
-bevy = { version = "0.15.3", default-features = false, features = [
+bevy = { version = "0.18.0", default-features = false, features = [
     "bevy_asset",
     "bevy_color",
     "bevy_core_pipeline",
@@ -33,7 +34,6 @@ bevy = { version = "0.15.3", default-features = false, features = [
     "bevy_state",
     "bevy_text",
     "bevy_ui",
-    "bevy_ui_picking_backend",
     "bevy_window",
     "bevy_winit",
     "custom_cursor",
@@ -42,7 +42,7 @@ bevy = { version = "0.15.3", default-features = false, features = [
     "sysinfo_plugin",
     "x11",
 ] }
-criterion = "0.5.1"
+criterion = "0.8.2"
 turborand = "0.10.1"
 
 # makes examples faster
