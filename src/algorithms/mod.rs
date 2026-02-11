@@ -4,10 +4,13 @@
 
 mod bvh;
 mod naive;
+mod octree;
 
 // Re-export algorithms for ease of use.
 pub use bvh::Bvh;
 pub use naive::Naive;
+pub use octree::Octree;
+pub use octree::OctreeConfig;
 
 /// Common tests which test all algorithms with the same World setup,
 /// to make sure they all return the same entities.

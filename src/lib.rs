@@ -49,9 +49,8 @@
 //! app.insert_resource(SpatialLookupState::with_algorithm(YourAwesomeAlgorithm));
 //! ```
 //!
-
 use bevy::prelude::*;
-use bevy::utils::Parallel;
+use std::collections::HashMap;
 
 pub mod algorithms;
 mod spatial_query;
@@ -59,10 +58,9 @@ mod spatial_query_iterator;
 
 pub mod prelude {
     pub use crate::spatial_query::SpatialQuery;
-    pub use crate::spatial_query::ReadOnlySpatialQuery;
     pub use crate::spatial_query_iterator::SpatialQueryIterator;
-    pub use crate::spatial_query_iterator::SpatialQueryIteratorRo;
-    pub use crate::{SpatialLookupAlgorithm, SpatialLookupState, SpatialQueriesPlugin};
+    pub use crate::{SpatialLookupAlgorithm, SpatialLookupState, SpatialQueriesPlugin, SpatialQueryEntity, PrepareSpatialLookup};
+    pub use crate::algorithms::{Naive, Bvh, Octree, OctreeConfig};
 }
 
 /// Adds `SpatialQuery` support to bevy.
@@ -80,20 +78,11 @@ pub struct PrepareSpatialLookup;
 #[derive(Component, Clone)]
 pub struct SpatialQueryEntity;
 
-impl Plugin for SpatialQueriesPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(SpatialLookupState::default())
-            .add_systems(FixedFirst, prepare_spatial_lookup.in_set(PrepareSpatialLookup));
-    }
-}
-
 /// Trait for defining Spatial Lookup Algorithms to be used with `SpatialQuery<_>`.
 pub trait SpatialLookupAlgorithm {
     /// Prepares the lookup algorithm with a fresh set of entities and their positions.
     ///
-    /// This gets called once per frame in the `First` schedule, and therefore
-    /// the implementation should be fairly fast. The algorithm should implement its own change
-    /// detection if necessary.
+    /// Called when the algorithm is (re)initialized or when a full rebuild is requested.
     fn prepare(&mut self, entities: &[(Entity, Vec3)]);
 
     /// Returns a list of all entities that are within the given radius of the sample point.
@@ -102,22 +91,46 @@ pub trait SpatialLookupAlgorithm {
     /// not return any entities outside of it.
     fn entities_in_radius(&self, sample_point: Vec3, radius: f32) -> Vec<Entity>;
 
-    /// Draw debug gizmos
+    /// Whether the algorithm supports incremental updates via `insert_entity` / `remove_entity` /
+    /// `update_entity`. If this returns false, the `SpatialLookupState` will fall back to
+    /// requesting a full rebuild.
+    fn supports_incremental(&self) -> bool {
+        false
+    }
+
+    /// Insert a single entity (incremental update path).
+    fn insert_entity(&mut self, _entity: Entity, _position: Vec3) {}
+
+    /// Remove a single entity (incremental update path).
+    fn remove_entity(&mut self, _entity: Entity) {}
+
+    /// Update a single entity's position (incremental update path).
+    fn update_entity(&mut self, _entity: Entity, _position: Vec3) {}
+
+    /// Draw debug gizmos.
     fn debug_gizmos(&self, _gizmos: &mut Gizmos) {}
 }
 
 /// Resource which holds the configured `SpatialLookupAlgorithm` and relevant state.
 #[derive(Resource)]
 pub struct SpatialLookupState {
+    /// Dense list of tracked entities + positions.
     pub entities: Vec<(Entity, Vec3)>,
+    /// Entity -> index in `entities` for O(1) updates/removals.
+    indices: HashMap<Entity, usize>,
     pub algorithm: Box<dyn SpatialLookupAlgorithm + Send + Sync>,
+    initialized: bool,
+    full_rebuild_requested: bool,
 }
 
 impl Default for SpatialLookupState {
     fn default() -> Self {
         SpatialLookupState {
             entities: Vec::new(),
+            indices: HashMap::default(),
             algorithm: Box::new(algorithms::Naive::default()),
+            initialized: false,
+            full_rebuild_requested: true, // first prepare builds everything
         }
     }
 }
@@ -126,7 +139,10 @@ impl SpatialLookupState {
     pub fn with_algorithm<T: SpatialLookupAlgorithm + Send + Sync + 'static>(algorithm: T) -> Self {
         Self {
             entities: vec![],
+            indices: HashMap::default(),
             algorithm: Box::new(algorithm),
+            initialized: false,
+            full_rebuild_requested: true,
         }
     }
 
@@ -135,36 +151,134 @@ impl SpatialLookupState {
         self.algorithm.entities_in_radius(sample_point, radius)
     }
 
+    /// Inserts or updates an entity in the tracked set, and (if supported) in the algorithm.
+    pub fn upsert_entity(&mut self, entity: Entity, position: Vec3) {
+        if let Some(&idx) = self.indices.get(&entity) {
+            self.entities[idx].1 = position;
+
+            if self.initialized && self.algorithm.supports_incremental() {
+                self.algorithm.update_entity(entity, position);
+            } else {
+                self.full_rebuild_requested = true;
+            }
+            return;
+        }
+
+        let idx = self.entities.len();
+        self.entities.push((entity, position));
+        self.indices.insert(entity, idx);
+
+        if self.initialized && self.algorithm.supports_incremental() {
+            self.algorithm.insert_entity(entity, position);
+        } else {
+            self.full_rebuild_requested = true;
+        }
+    }
+
+    /// Removes an entity from the tracked set, and (if supported) from the algorithm.
+    pub fn remove_entity(&mut self, entity: Entity) {
+        let Some(idx) = self.indices.remove(&entity) else { return; };
+
+        // swap_remove for O(1)
+        let last = self.entities.len() - 1;
+        self.entities.swap(idx, last);
+        let _removed = self.entities.pop();
+
+        if idx != last {
+            let swapped_entity = self.entities[idx].0;
+            self.indices.insert(swapped_entity, idx);
+        }
+
+        if self.initialized && self.algorithm.supports_incremental() {
+            self.algorithm.remove_entity(entity);
+        } else {
+            self.full_rebuild_requested = true;
+        }
+    }
+
     /// Prepares the configured algorithm for lookup.
+    ///
+    /// - Always runs at least once (first frame).
+    /// - Runs again only when a full rebuild is requested.
     pub fn prepare_algorithm(&mut self) {
-        self.algorithm.prepare(&self.entities);
+        if !self.initialized || self.full_rebuild_requested {
+            self.algorithm.prepare(&self.entities);
+            self.initialized = true;
+            self.full_rebuild_requested = false;
+        }
+    }
+
+    /// Force a full rebuild on the next `prepare_algorithm`.
+    pub fn request_full_rebuild(&mut self) {
+        self.full_rebuild_requested = true;
     }
 }
 
-/// Prepares the configured spatial lookup algorithm.
+impl Plugin for SpatialQueriesPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(SpatialLookupState::default())
+            // Initial prepare / fallback rebuild
+            .add_systems(First, prepare_spatial_lookup.in_set(PrepareSpatialLookup))
+            // Incremental lifecycle hooks
+            .add_observer(spatial_entity_added)
+            .add_observer(spatial_entity_removed)
+            .add_systems(Last,spatial_transform_changed);
+    }
+}
+
+/// Initializes (or rebuilds) the configured spatial lookup algorithm.
 ///
-/// Any systems using `SpatialQuery<_>` *MUST* be scheduled after this system
+/// This does NOT rebuild the index every frame. It only does a full scan when:
+/// - the algorithm has never been initialized, or
+/// - a full rebuild was requested (e.g. non-incremental algorithm + entity add/remove).
 pub fn prepare_spatial_lookup(
     all_entities: Query<(Entity, &GlobalTransform), With<SpatialQueryEntity>>,
     mut lookup_state: ResMut<SpatialLookupState>,
 ) {
-    // Thread-local bins: each worker gets its own Vec
-    let mut bins: Parallel<Vec<(Entity, Vec3)>> = Parallel::default();
+    // If we haven't initialized yet, populate tracked entities from the world.
+    if !lookup_state.initialized {
+        lookup_state.entities.clear();
+        lookup_state.indices.clear();
 
-    all_entities.par_iter().for_each_init(
-        || bins.borrow_local_mut(),
-        |local, (entity, transform)| {
-            local.push((entity, transform.translation()));
-        },
-    );
-
-    // Merge bins (single-threaded, but only O(num_threads) appends)
-    lookup_state.entities.clear();
-    for v in bins.iter_mut() {
-        lookup_state.entities.append(v);
+        for (entity, transform) in &all_entities {
+            let idx = lookup_state.entities.len();
+            lookup_state.entities.push((entity, transform.translation()));
+            lookup_state.indices.insert(entity, idx);
+        }
+        lookup_state.request_full_rebuild();
     }
 
     lookup_state.prepare_algorithm();
+}
+
+/// Observer: when `SpatialQueryEntity` is added, incrementally insert it into the index.
+fn spatial_entity_added(
+    trigger: On<Add, SpatialQueryEntity>,
+    transforms: Query<&GlobalTransform>,
+    mut lookup_state: ResMut<SpatialLookupState>,
+) {
+    let entity = trigger.entity;
+    if let Ok(gt) = transforms.get(entity) {
+        lookup_state.upsert_entity(entity, gt.translation());
+    }
+}
+
+/// Observer: when `SpatialQueryEntity` is removed (including despawn), remove it from the index.
+fn spatial_entity_removed(
+    trigger: On<Remove, SpatialQueryEntity>,
+    mut lookup_state: ResMut<SpatialLookupState>,
+) {
+    lookup_state.remove_entity(trigger.entity);
+}
+
+/// System: when an indexed entity's `GlobalTransform` changes, update its position in the index.
+fn spatial_transform_changed(
+    changed_tranforms: Query<(Entity,&GlobalTransform),(Changed<GlobalTransform>,With<SpatialQueryEntity>)>,
+    mut lookup_state: ResMut<SpatialLookupState>,
+) {
+    for (entity, gt) in changed_tranforms {
+        lookup_state.upsert_entity(entity, gt.translation());
+    }
 }
 
 pub fn draw_spatial_lookup_gizmos(lookup_state: Res<SpatialLookupState>, mut gizmos: Gizmos) {
