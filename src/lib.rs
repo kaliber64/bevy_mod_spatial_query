@@ -49,6 +49,7 @@
 //! app.insert_resource(SpatialLookupState::with_algorithm(YourAwesomeAlgorithm));
 //! ```
 //!
+
 use bevy::prelude::*;
 
 pub mod algorithms;
