@@ -51,6 +51,7 @@
 //!
 
 use bevy::prelude::*;
+use bevy::utils::Parallel;
 
 pub mod algorithms;
 mod spatial_query;
@@ -147,12 +148,20 @@ pub fn prepare_spatial_lookup(
     all_entities: Query<(Entity, &GlobalTransform), With<SpatialQueryEntity>>,
     mut lookup_state: ResMut<SpatialLookupState>,
 ) {
-    lookup_state.entities.clear();
+    // Thread-local bins: each worker gets its own Vec
+    let mut bins: Parallel<Vec<(Entity, Vec3)>> = Parallel::default();
 
-    for (entity, transform) in &all_entities {
-        lookup_state
-            .entities
-            .push((entity, transform.translation()));
+    all_entities.par_iter().for_each_init(
+        || bins.borrow_local_mut(),
+        |local, (entity, transform)| {
+            local.push((entity, transform.translation()));
+        },
+    );
+
+    // Merge bins (single-threaded, but only O(num_threads) appends)
+    lookup_state.entities.clear();
+    for v in bins.iter_mut() {
+        lookup_state.entities.append(v);
     }
 
     lookup_state.prepare_algorithm();
