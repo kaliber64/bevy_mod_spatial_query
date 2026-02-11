@@ -58,7 +58,9 @@ mod spatial_query_iterator;
 
 pub mod prelude {
     pub use crate::spatial_query::SpatialQuery;
+    pub use crate::spatial_query::ReadOnlySpatialQuery;
     pub use crate::spatial_query_iterator::SpatialQueryIterator;
+    pub use crate::spatial_query_iterator::SpatialQueryIteratorRo;
     pub use crate::{SpatialLookupAlgorithm, SpatialLookupState, SpatialQueriesPlugin, SpatialQueryEntity, PrepareSpatialLookup};
     pub use crate::algorithms::{Naive, Bvh, Octree, OctreeConfig};
 }
