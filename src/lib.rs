@@ -224,7 +224,7 @@ impl Plugin for SpatialQueriesPlugin {
             // Incremental lifecycle hooks
             .add_observer(spatial_entity_added)
             .add_observer(spatial_entity_removed)
-            .add_systems(Last,spatial_transform_changed);
+            .add_systems(FixedLast,spatial_transform_changed);
     }
 }
 
