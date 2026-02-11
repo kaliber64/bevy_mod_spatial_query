@@ -82,7 +82,7 @@ pub struct SpatialQueryEntity;
 impl Plugin for SpatialQueriesPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(SpatialLookupState::default())
-            .add_systems(First, prepare_spatial_lookup.in_set(PrepareSpatialLookup));
+            .add_systems(FixedFirst, prepare_spatial_lookup.in_set(PrepareSpatialLookup));
     }
 }
 
